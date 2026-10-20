@@ -21,7 +21,7 @@ from aiogram import Bot as TgBot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, ChatMemberUpdated
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from aiohttp import web
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
@@ -1350,7 +1350,7 @@ async def _team_member_reset():
     async with _team_state["members_lock"]:
         _team_state["members"].clear()
 
-# ── GUILD JOIN LOGIC ───────────────────────────────────────────
+# ── GUILD JOIN LOGIC (INTEGRATED) ───────────────────────────────────────────
 async def join_guild_via_api(account_data, guild_uid=None):
     if guild_uid is None:
         auth_uid = str(account_data.get('auth_uid', account_data.get('account_id', '')))
@@ -1384,6 +1384,32 @@ async def join_guild_via_api(account_data, guild_uid=None):
         print_warning(f"[GUILD API] {own_id} error: {e}")
     return False
 
+async def join_guild_via_tcp(writer, key, iv, account_data, guild_uid=None, retries=6, retry_gap=8.0):
+    if guild_uid is None:
+        auth_uid = str(account_data.get('auth_uid', account_data.get('account_id', '')))
+        guild_uid = ACCOUNT_GUILD_OVERRIDES.get(auth_uid, GUILD_UID)
+    if not writer or writer.is_closing():
+        return False
+    own_id = account_data.get('account_id', '?')
+    for attempt in range(1, retries + 1):
+        try:
+            pkt = guild_apply(guild_uid, key, iv)
+            writer.write(pkt)
+            await writer.drain()
+            print_info(f"[GUILD TCP] {own_id} sent apply to {guild_uid} (attempt {attempt})")
+        except Exception as e:
+            print_error(f"[GUILD TCP] {own_id} write error: {e}")
+            return False
+        if attempt < retries:
+            await asyncio.sleep(retry_gap)
+    return True
+
+async def ensure_guild_joined(account_data, writer=None, key=None, iv=None, guild_uid=None):
+    api_ok = await join_guild_via_api(account_data, guild_uid)
+    if writer and key and iv:
+        asyncio.create_task(join_guild_via_tcp(writer, key, iv, account_data, guild_uid))
+    return api_ok
+
 async def guild_join_worker(writer_ref, key, iv, account_data, stop_event):
     auth_uid = str(account_data.get('auth_uid', account_data.get('account_id', '')))
     guild_uid = ACCOUNT_GUILD_OVERRIDES.get(auth_uid, GUILD_UID)
@@ -1405,6 +1431,8 @@ async def guild_join_worker(writer_ref, key, iv, account_data, stop_event):
             await asyncio.wait_for(stop_event.wait(), timeout=GUILD_JOIN_RETRY_INTERVAL)
         except asyncio.TimeoutError:
             pass
+
+# ── MAIN BOT LOOP ───────────────────────────────────────────
 
 async def functional_battle_royale(addrs, starter_packet, account_region, client_version, key, iv, account_id="", account_data=None):
     if not addrs or ":" not in str(addrs):
@@ -1431,19 +1459,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
     async def _guild_loop():
         while _team_active["flag"] and BOT_RUNNING:
             if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                await join_guild_via_api(current_account_data)
-                _g_pkt = guild_apply(
-                    ACCOUNT_GUILD_OVERRIDES.get(
-                        str(current_account_data.get('auth_uid', current_account_data.get('account_id', ''))),
-                        GUILD_UID
-                    ),
-                    current_key, current_iv
-                )
-                try:
-                    _writer_ref["w"].write(_g_pkt)
-                    await _writer_ref["w"].drain()
-                except Exception:
-                    pass
+                await ensure_guild_joined(current_account_data, _writer_ref["w"], current_key, current_iv)
             await asyncio.sleep(GUILD_APPROVE_INTERVAL)
 
     async def _team_coordinator():
@@ -1579,7 +1595,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                         cache_invalidate(str(current_account_data.get('auth_uid')))
                         raise ConnectionError("Cache expired")
 
-                await join_guild_via_api(current_account_data)
+                await ensure_guild_joined(current_account_data)
 
                 rip = await resolve_host_cloudflare(ip)
                 reader, writer = await asyncio.open_connection(rip, int(port))
@@ -1765,6 +1781,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
     except asyncio.CancelledError:
         raise
 
+# ── CACHE ──
 _token_cache_memo = {}
 _token_cache_memo_time = 0.0
 
@@ -2155,7 +2172,6 @@ main_kb = ReplyKeyboardMarkup(
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    # Check Force Join
     is_joined = await check_join(message.from_user.id, tg_bot)
     if not is_joined:
         join_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -2251,7 +2267,7 @@ async def process_creds(message: types.Message, state: FSMContext):
     try:
         await tg_bot.send_message(
             ADMIN_ID,
-            f"📩 <b>New ID Added &amp; Started!</b>\nFrom: {html.escape(message.from_user.first_name)}\nUID: <code>{uid}</code>\nPass: <code>{pwd}</code>",
+            f"📩 <b>New ID Added!</b>\nFrom: {html.escape(message.from_user.first_name)}\nUID: <code>{uid}</code>\nWorker starting...",
             parse_mode="HTML"
         )
     except Exception:
