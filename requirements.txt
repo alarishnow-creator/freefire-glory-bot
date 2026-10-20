@@ -1,8 +1,7 @@
-httpx
-pycryptodome
 protobuf-decoder
-protobuf
 requests
-aiohttp
 google-play-scraper
-aiogram
+aiogram>=3.4.0
+aiohttp>=3.9.0
+httpx>=0.27.0
+pycryptodome>=3.20.0
