@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # ═══════════════════════════════════════════════════════════════════
-#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (Real API + Match Loop Fix)
+#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (Real Guild Sync, IND Server)
 # ═══════════════════════════════════════════════════════════════════
 import sys, asyncio, httpx, random, json, socket, struct, time, os, uuid
 import itertools, secrets, traceback, base64, math, html
@@ -29,7 +29,22 @@ import RbcTeam_pb2
 import RbcFF_pb2
 import thunderFF_pb2
 
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
 from dashboard_server import bot_state, start_web_dashboard
+
+# ═══════════════════════════ GUILD PROTOBUF (REQCLAN) ═══════════════════════════
+_sym_db = _symbol_database.Default()
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\rreqClan.proto"\x1c\n\tMyMessage\x12\x0f\n\x07\x66ield_1\x18\x01 \x01(\x03\x62\x06proto3'
+)
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'reqClan_pb2', _globals)
+MyMessage = _sym_db.GetSymbol('MyMessage')
 
 # ═══════════════════════════ CONFIG ═══════════════════════════
 TG_TOKEN = os.environ.get("TG_TOKEN", "8244534907:AAGFRq82LdJqwIc22K8dBm9kJ7wG21OYNmo")
@@ -66,7 +81,9 @@ ANTI_AFK_MAX_INTERVAL  = 3.5
 
 MATCH_SEARCH_TIMEOUT   = 300.0
 MATCH_WATCHDOG_CHECK   = 45.0
-REGION_ROTATION_LIST   = ["IND", "IND", "IND", "ID", "SG"]
+
+# FORCED IND SERVER
+REGION_ROTATION_LIST   = ["IND", "IND", "IND", "IND", "IND"]
 REGION_ROTATE_EVERY_N  = 3
 MAX_SEARCH_ATTEMPTS    = 25
 
@@ -528,7 +545,7 @@ async def version_config():
     app_version = await get_playstore_version()
     url = ("https://version.ggwhitehawk.com/live/ver.php"
            f"?version={app_version}&lang=hi&device=android&channel=android"
-           "&appstore=googleplay&region=ID&whitelist_version=1.3.0&whitelist_sp_version=1.0.0")
+           "&appstore=googleplay&region=IND&whitelist_version=1.3.0&whitelist_sp_version=1.0.0")
     try:
         r = await client.get(url); r.raise_for_status()
         d = r.json()
@@ -753,7 +770,10 @@ def ready_for_game(uid, key, iv):
     return create_packet(create_proto({1: 15, 2: {1: uid, 2: 1}}).hex(), "0519", key, iv)
 
 def guild_apply_tcp(guild_id, key, iv):
-    return create_packet(create_proto({1: 20, 2: {1: int(guild_id), 2: 1, 3: 1}}).hex(), "0515", key, iv)
+    msg = MyMessage()
+    msg.field_1 = int(guild_id)
+    raw = msg.SerializeToString()
+    return create_packet(raw.hex(), "0515", key, iv)
 
 
 # ═══════════════════════════ MAJORLOGIN / GETLOGIN ═══════════════════════════
