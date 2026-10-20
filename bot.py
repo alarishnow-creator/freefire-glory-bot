@@ -66,7 +66,8 @@ ANTI_AFK_MAX_INTERVAL  = 3.5
 
 MATCH_SEARCH_TIMEOUT   = 120.0
 MATCH_WATCHDOG_CHECK   = 30.0
-REGION_ROTATION_LIST   = ["BD", "ID", "SG"]
+# IND server priority
+REGION_ROTATION_LIST   = ["IND", "IND", "IND", "ID", "SG"]
 REGION_ROTATE_EVERY_N  = 3
 MAX_SEARCH_ATTEMPTS    = 25
 
@@ -716,7 +717,7 @@ def create_packet(Pk, N, K, V):
 def create_team(key, iv, game_version="1.132.9"):
     fields = {
         1: 1, 2: {2: bytes.fromhex("01"), 3: 1, 4: 3, 5: "en",
-            8: {1: "IDC3", 2: 123, 3: "ID"}, 9: 1,
+            8: {1: "IDC3", 2: 123, 3: "IND"}, 9: 1,
             10: bytes.fromhex("01090a0b1219202729"), 11: 2, 13: 1,
             14: {1: "08FBA33B4BABE2790205390333330000009700050092005F72697EB2134DCBB2467625142201040e38e848dc0e748c3f6aa04d81000000ff1113090dcacfa16d",
                  2: 478, 3: "7e585d55", 4: "y[Z]", 6: 12, 7: "15686677735a7506101c",
@@ -728,7 +729,7 @@ def create_team(key, iv, game_version="1.132.9"):
 def team_fresh(account_id, key, iv):
     return create_packet(create_proto({1: 72, 2: {1: int(account_id)}}).hex(), "0515", key, iv)
 
-def invite_player_in_team(target_uid, key, iv, region="ID"):
+def invite_player_in_team(target_uid, key, iv, region="IND"):
     return create_packet(create_proto({1: 2, 2: {1: int(target_uid), 2: region, 4: 1}}).hex(),
                          "0515", key, iv)
 
@@ -739,13 +740,13 @@ def accept_team_invite(target_uid, group_id, key, iv):
             2: 235, 3: {14: 80, 11: 86}, 4: "{Y\\R", 6: 13, 7: {2: 4},
             8: "1.132.9", 9: 2, 10: 1, 11: "0362625351"},
         10: str(group_id),
-        11: {"1": "IDC3", "2": 107, "3": "ID"}, 13: "en", 16: "374f5219",
+        11: {"1": "IDC3", "2": 107, "3": "IND"}, 13: "en", 16: "374f5219",
         20: {1: 21}, 23: "a_6534489873065906362",
         24: "https://dl-sg-production.freefiremobile.com/",
         27: {1: 2, 2: 4}}}
     return create_packet(create_proto(fields).hex(), "0515", key, iv)
 
-def start_match_team(account_id, key, iv, region="ID"):
+def start_match_team(account_id, key, iv, region="IND"):
     fields = {1: 9, 2: {1: int(account_id), 7: {1: "IDC3", 2: 410, 3: region}}}
     return create_packet(create_proto(fields).hex(), "0515", key, iv)
 
@@ -774,7 +775,7 @@ async def build_majorlogin_payload(open_id, access_token, platform, client_versi
             19: str(dev.get("unique_device_id", f"Google|{uuid.uuid4()}")),
             20: str(dev.get("client_ip", "182.5.135.225")),
             21: "en", 22: str(open_id), 23: str(platform), 24: "Handheld",
-            25: str(dev.get("model", "Xiaomi")), 26: "ID",
+            25: str(dev.get("model", "Xiaomi")), 26: "IND",
             29: str(access_token), 30: "1", 41: "Telkomsel", 42: "4G",
             57: "7428b253defc164018c604a1ebbfebdf", 60: "109278", 61: "55402",
             62: "868", 64: "55927", 65: "109278", 66: "55927", 67: "109278",
@@ -846,24 +847,24 @@ async def send_getlogin(data, base_url, token, release_version):
 
 
 # ═══════════════════════════ TCP STARTUP ═══════════════════════════
-async def build_tcp_startup_packet(account_id, token, server_time, key, iv, region="ID", typ='OnLine'):
+async def build_tcp_startup_packet(account_id, token, server_time, key, iv, region="IND", typ='OnLine'):
     uid_hex = f"{int(account_id):016x}"
     ts_hex = f"{int(server_time):08x}"
     enc = (await aes_encrypt(token.encode(), key, iv)).hex()
     enc_len = f"{len(enc)//2:08x}"
-    reg = str(region).upper() if region else "ID"
+    reg = str(region).upper() if region else "IND"
     if typ == 'OnLine':
-        pfx = '7119' if reg == 'ID' else ('7114' if reg == 'IND' else '7115')
+        pfx = '7114' if reg == 'IND' else ('7119' if reg == 'ID' else '7115')
         return f"{pfx}{uid_hex}{ts_hex}00000000{enc_len}{enc}"
-    pfx = '9219' if reg == 'ID' else ('9214' if reg == 'IND' else '9215')
+    pfx = '9214' if reg == 'IND' else ('9219' if reg == 'ID' else '9215')
     return f"{pfx}{uid_hex}{ts_hex}{enc_len}{enc}"
 
-async def send_keep_alive(region="ID"):
+async def send_keep_alive(region="IND"):
     try:
-        reg = str(region).upper() if region else "ID"
-        return bytes.fromhex("0219" if reg == "ID" else ("0214" if reg == "IND" else "0215"))
+        reg = str(region).upper() if region else "IND"
+        return bytes.fromhex("0214" if reg == "IND" else ("0219" if reg == "ID" else "0215"))
     except Exception:
-        return bytes.fromhex("0219")
+        return bytes.fromhex("0214")
 
 
 # ═══════════════════════════ UDP HELPERS ═══════════════════════════
@@ -1097,7 +1098,7 @@ async def decode_packet(packet, key, mask=None):
     return candidates[0]
 
 async def build_match_startup_packets(token, udp_key, match_code, account_id, block_val,
-                                      server_ip="", region="ID", client_version="1.132.6",
+                                      server_ip="", region="IND", client_version="1.132.6",
                                       client_version_code="2019121229", access_token="",
                                       mode_id=BR_MODE_ID, map_id=BR_MAP_ID):
     token = token.strip()
@@ -1108,7 +1109,7 @@ async def build_match_startup_packets(token, udp_key, match_code, account_id, bl
     eth = thunder_jwt.encode() if isinstance(thunder_jwt, str) else thunder_jwt
     esh = sharma_jwt.encode() if isinstance(sharma_jwt, str) else sharma_jwt
     garena420 = await has_ssan_zig(len(eth)) + eth
-    reg = str(region).upper() if region else "ID"
+    reg = str(region).upper() if region else "IND"
     csoversea_block = bytes.fromhex(
         "ca0163736f7665727365612e7374726f6e67686f6c642e66726565666972656d6f62696c652e636f6d"
         "3b302e302e302e303b33342e3132362e37362e34353b33342e38372e3137372e31343b33342e38372e"
@@ -1704,6 +1705,23 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
             if cd: await refresh_account_profile(cd)
         except Exception: pass
 
+    async def _guild_loop():
+        while _team_active["flag"]:
+            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                _g_pkt = guild_apply_tcp(
+                    ACCOUNT_GUILD_OVERRIDES.get(
+                        str(current_account_data.get('auth_uid', current_account_data.get('account_id', ''))),
+                        GUILD_UID
+                    ),
+                    current_key, current_iv
+                )
+                try:
+                    _writer_ref["w"].write(_g_pkt)
+                    await _writer_ref["w"].drain()
+                except Exception:
+                    pass
+            await asyncio.sleep(GUILD_APPROVE_INTERVAL)
+
     async def _team_coordinator():
         try:
             deadline = time.time() + TEAM_PEER_WAIT_TIMEOUT
@@ -2009,7 +2027,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                             if '5' in res and 'data' in res['5']:
                                 block_val = res['5']['data'].get('1', {}).get('data')
 
-                            effective = match_account_id or account_id or "BD_BOT"
+                            effective = match_account_id or account_id or "IND_BOT"
                             if token and udp_key and match_code and server_ip_port:
                                 try:
                                     async with _team_state["lock"]:
@@ -2133,7 +2151,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
 
 
 # ═══════════════════════════ INFORMATIONAL ═══════════════════════════
-async def informational(addrs, starter_packet, key, iv, region="ID", max_reconnects=3):
+async def informational(addrs, starter_packet, key, iv, region="IND", max_reconnects=3):
     ip, port = addrs.split(":")
     while True:
         writer = None; ping_task = None
@@ -2235,7 +2253,7 @@ async def process_account_uid_pass(uid, password):
         acc_id = str(cached['account_id'])
         bot_state.register_account(uid=acc_id,
             nickname=cached.get('nickname', f"Player_{acc_id}"),
-            region=cached.get('region', 'BD'),
+            region=cached.get('region', 'IND'),
             level=cached.get('level', 1), exp=cached.get('exp', 0),
             likes=cached.get('likes', 0))
         _register_credentials(cached); return cached
@@ -2260,7 +2278,7 @@ async def process_account_uid_pass(uid, password):
         exp = int(get_proto_field(dd, 7, 0) or 0)
         likes = int(get_proto_field(dd, 8, 0) or 0)
         nick = rp.nickname or get_proto_field(dd, 4, f"Player_{acc_id}")
-        region = mresp.region or get_proto_field(dd, 3, "BD")
+        region = mresp.region or get_proto_field(dd, 3, "IND")
         bot_state.register_account(uid=acc_id, nickname=nick, region=region,
                                     level=level, exp=exp, likes=likes)
         print_success(f"[OK] {acc_id} | {nick} | Lvl{level}")
@@ -2288,7 +2306,7 @@ async def process_account_token(access_token):
         acc_id = str(cached['account_id'])
         bot_state.register_account(uid=acc_id,
             nickname=cached.get('nickname', f"Player_{acc_id}"),
-            region=cached.get('region', 'BD'),
+            region=cached.get('region', 'IND'),
             level=cached.get('level', 1), exp=cached.get('exp', 0),
             likes=cached.get('likes', 0))
         _register_credentials(cached); return cached
@@ -2318,7 +2336,7 @@ async def process_account_token(access_token):
         exp = int(get_proto_field(dd, 7, 0) or 0)
         likes = int(get_proto_field(dd, 8, 0) or 0)
         nick = rp.nickname or get_proto_field(dd, 4, f"Player_{acc_id}")
-        region = mresp.region or get_proto_field(dd, 3, "BD")
+        region = mresp.region or get_proto_field(dd, 3, "IND")
         bot_state.register_account(uid=acc_id, nickname=nick, region=region,
                                     level=level, exp=exp, likes=likes)
         ad = {
@@ -2341,7 +2359,7 @@ async def run_account_worker(ad, label):
     acc_id = str(ad['account_id'])
     info_task = None; exp_task = None
     try:
-        reg = ad.get('region', 'BD')
+        reg = ad.get('region', 'IND')
         tcp_online = await build_tcp_startup_packet(
             ad['account_id'], ad['token'], ad['server_time'],
             ad['aes_ak'], ad['iv_i'], region=reg, typ='OnLine')
