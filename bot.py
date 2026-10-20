@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 # ═══════════════════════════════════════════════════════════════════
-#  TEAM RBC — BRUTAL SQUAD BOT (100% Squad Match Lock)
+#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (Telegram + Guild + Dashboard)
 # ═══════════════════════════════════════════════════════════════════
 import sys, asyncio, httpx, random, json, socket, struct, time, os, uuid
-import itertools, secrets, traceback, base64, math
+import itertools, secrets, traceback, base64, math, html
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -13,6 +13,12 @@ if sys.platform == "win32":
             sys.stdout.reconfigure(encoding='utf-8', errors='replace')
             sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     except Exception: pass
+
+from aiogram import Bot as TgBot, Dispatcher, F, types
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 
 from google_play_scraper import app as play_scraper
 from Crypto.Cipher import AES
@@ -26,25 +32,31 @@ import thunderFF_pb2
 from dashboard_server import bot_state, start_web_dashboard
 
 # ═══════════════════════════ CONFIG ═══════════════════════════
+TG_TOKEN = os.environ.get("TG_TOKEN", "8244534907:AAGFRq82LdJqwIc22K8dBm9kJ7wG21OYNmo")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "7424554376"))
+
+FORCE_CHANNEL_ID = "-1003725624623"
+FORCE_CHANNEL_LINK = "https://t.me/+Qw8U-azwpbFjYmQ1"
+
 WEB_HOST = "0.0.0.0"
-WEB_PORT = 20333
+WEB_PORT = int(os.environ.get("PORT", 20333))
 ACCOUNTS_FILE = "accounts.json"
 TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"
 TOKEN_CACHE_TTL = 4500
 
 START_MATCH_INTERVAL    = 4.0
-NEW_MATCH_DELAY         = 8.0 
+NEW_MATCH_DELAY         = 8.0   
 MAX_MATCH_DURATION      = 3000
 MATCH_IDLE_TIMEOUT      = 90.0
 EXP_REFRESH_INTERVAL    = 30.0
-EXP_REFRESH_AFTER_MATCH_DELAY = 60.0
+EXP_REFRESH_AFTER_MATCH_DELAY = 60.0   
 MAX_CONSECUTIVE_PARSE_FAILURES = 5
 NON_MATCH_RECONNECT_DELAY      = 1.0
 
-DEATH_WAIT_SECONDS      = 120.0
-MATCH_END_WAIT_SECONDS  = 60.0
-SQUAD_SYNC_TIMEOUT      = 360.0
+DEATH_WAIT_SECONDS      = 120.0   
+MATCH_END_WAIT_SECONDS  = 60.0    
+SQUAD_SYNC_TIMEOUT      = 360.0   
 
 BR_MODE_ID             = 1
 BR_MAP_ID              = 1
@@ -73,10 +85,6 @@ MOVEMENT_RADIUS             = 180
 MOVEMENT_UPDATE_SPEED_EVERY = 4.0
 
 ENABLE_HTTP_PING = False
-PING_INTERVAL    = 20.0
-PING_TIMEOUT     = 8.0
-PING_URL         = "https://loginbp.ppmainecoonghj.com/Ping"
-PING_REAL_IP     = "103.109.214.211"
 
 FALLBACK_UID = ""
 FALLBACK_PASSWORD = ""
@@ -84,18 +92,24 @@ FALLBACK_PASSWORD = ""
 # ═══════════════════════════ SQUAD CONFIG (BRUTAL FIX) ═══════════════════════════
 TEAM_MODE               = True
 TEAM_SIZE               = 4
-TEAM_PEER_WAIT_TIMEOUT  = 90.0  # Wait up to 90s for all 4 peers to connect
-TEAM_CREATE_WAIT        = 5.0   # Wait 5s for lobby creation
+TEAM_PEER_WAIT_TIMEOUT  = 90.0  
+TEAM_CREATE_WAIT        = 5.0   
 TEAM_INVITE_CYCLE_WAIT  = 5.0
 TEAM_INVITE_MAX_TIME    = 60.0
 TEAM_HEARTBEAT_INTERVAL = 3.0
 TEAM_IDLE_ITERS_TEAM    = 3600
 TEAM_MEMBER_START_DELAY = 20.0
-TEAM_FINAL_WAIT         = 8.0   # Wait 8s for invites to be accepted before starting match
+TEAM_FINAL_WAIT         = 8.0   
 TEAM_READY_DELAY        = 5.0
 _accept_friend_request  = True
 DEBUG_TEAM_PACKETS      = False
 
+# ── GUILD CONFIG ──
+GUILD_UID = os.environ.get("GUILD_UID", "3055649830")
+GUILD_JOIN_RETRY_INTERVAL = 8.0
+GUILD_JOIN_MAX_ATTEMPTS = 6
+GUILD_APPROVE_INTERVAL = 30.0
+ACCOUNT_GUILD_OVERRIDES = {}
 
 # ═══════════════════════════ SQUAD MATCH SYNC ═══════════════════════════
 class SquadMatchSync:
@@ -738,6 +752,9 @@ def start_match_team(account_id, key, iv, region="ID"):
 def ready_for_game(uid, key, iv):
     return create_packet(create_proto({1: 15, 2: {1: uid, 2: 1}}).hex(), "0519", key, iv)
 
+def guild_apply_tcp(guild_id, key, iv):
+    return create_packet(create_proto({1: 20, 2: {1: int(guild_id), 2: 1, 3: 1}}).hex(), "0515", key, iv)
+
 
 # ═══════════════════════════ MAJORLOGIN / GETLOGIN ═══════════════════════════
 async def build_majorlogin_payload(open_id, access_token, platform, client_version, dev):
@@ -1237,7 +1254,7 @@ async def anti_afk_worker(sock, ip, port, udp_key_bytes, match_code, account_id,
         if fires > 0: print_info(f"[AFK] #{match_index} Fires={fires}")
 
 
-# ═══════════════════════════ ⭐ PLAY GAME ═══════════════════════════
+# ═══════════════════════════ ⭐ PLAY GAME (EXP+GLORY SAVE FIX) ═══════════════════════════
 async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                     account_id, player_region, client_version, key, iv,
                     match_index, on_match_complete=None):
@@ -1621,6 +1638,63 @@ async def _handle_team_invite(hex_data, pl, uid_str, current_account_data,
         return False
 
 
+# ═══════════════════════════ GUILD LOGIC ═══════════════════════════
+async def join_guild_via_api(account_data, guild_uid=None):
+    if guild_uid is None:
+        auth_uid = str(account_data.get('auth_uid', account_data.get('account_id', '')))
+        guild_uid = ACCOUNT_GUILD_OVERRIDES.get(auth_uid, GUILD_UID)
+    jwt = account_data.get('token')
+    srv = account_data.get('server_url')
+    rel = account_data.get('release_version')
+    own_id = account_data.get('account_id')
+    if not (jwt and srv and rel and own_id):
+        return False
+    try:
+        payload = bytes.fromhex(encrypt_api_bytes(create_proto({"1": int(own_id), "2": int(guild_uid)})).hex())
+        hdrs = {
+            "authorization": f"Bearer {jwt}",
+            "host": srv.replace("https://", "").replace("http://", "").split("/")[0],
+            "x-ga": "v1 1",
+            "content-type": "application/x-www-form-urlencoded",
+            "accept-encoding": "deflate, gzip",
+            "releaseversion": f"{rel}",
+            "user-agent": "UnityPlayer/2022.3.47f1",
+            "accept": "*/*",
+            "x-unity-version": "2022.3.47f1"
+        }
+        r = await client.post(f"{srv.rstrip('/')}/JoinGuild", headers=hdrs, content=payload, timeout=10.0)
+        if r.status_code == 200:
+            print_success(f"[GUILD API] {own_id} joined guild {guild_uid}")
+            return True
+        else:
+            print_warning(f"[GUILD API] {own_id} join HTTP {r.status_code}, will retry via TCP")
+    except Exception as e:
+        print_warning(f"[GUILD API] {own_id} error: {e}")
+    return False
+
+async def guild_join_worker(writer_ref, key, iv, account_data, stop_event):
+    auth_uid = str(account_data.get('auth_uid', account_data.get('account_id', '')))
+    guild_uid = ACCOUNT_GUILD_OVERRIDES.get(auth_uid, GUILD_UID)
+    attempts = 0
+    while not stop_event.is_set() and attempts < GUILD_JOIN_MAX_ATTEMPTS:
+        if bot_state.is_paused(str(account_data.get('account_id'))):
+            break
+        w = writer_ref.get("w")
+        if w and not w.is_closing():
+            try:
+                pkt = guild_apply_tcp(guild_uid, key, iv)
+                w.write(pkt)
+                await w.drain()
+                print_info(f"[GUILD TCP] {account_data.get('account_id')} sent apply to {guild_uid} (attempt {attempts+1})")
+            except Exception:
+                pass
+        attempts += 1
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=GUILD_JOIN_RETRY_INTERVAL)
+        except asyncio.TimeoutError:
+            pass
+
+
 # ═══════════════════════════ FUNCTIONAL (MAIN) ═══════════════════════════
 async def functional_battle_royale(addrs, starter_packet, account_region, client_version,
                                     key, iv, account_id="", account_data=None,
@@ -1645,6 +1719,24 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
             cd = bot_state.account_credentials.get(uid_str)
             if cd: await refresh_account_profile(cd)
         except Exception: pass
+
+    async def _guild_loop():
+        while _team_active["flag"]:
+            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                await join_guild_via_api(current_account_data)
+                _g_pkt = guild_apply_tcp(
+                    ACCOUNT_GUILD_OVERRIDES.get(
+                        str(current_account_data.get('auth_uid', current_account_data.get('account_id', ''))),
+                        GUILD_UID
+                    ),
+                    current_key, current_iv
+                )
+                try:
+                    _writer_ref["w"].write(_g_pkt)
+                    await _writer_ref["w"].drain()
+                except Exception:
+                    pass
+            await asyncio.sleep(GUILD_APPROVE_INTERVAL)
 
     async def _team_coordinator():
         try:
@@ -1806,6 +1898,8 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
         while True:
             writer = None; gateway_ping_task = None
             team_coord_task = None; member_trigger_task = None
+            guild_task = None; guild_join_task = None
+            guild_stop = asyncio.Event()
             try:
                 if current_account_data:
                     fresh = None
@@ -1834,6 +1928,8 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                         except Exception: pass
                         raise ConnectionError("Cache expired")
 
+                await join_guild_via_api(current_account_data)
+
                 rip = await resolve_host_cloudflare(ip)
                 reader, writer = await asyncio.open_connection(rip, int(port))
                 _writer_ref["w"] = writer
@@ -1851,6 +1947,11 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                                 writer.write(ka_bytes); await writer.drain()
                         except Exception: break
                 gateway_ping_task = asyncio.create_task(func_gateway_keepalive())
+
+                guild_stop.clear()
+                guild_join_task = asyncio.create_task(
+                    guild_join_worker(_writer_ref, current_key, current_iv, current_account_data, guild_stop)
+                )
 
                 connection_start_time = asyncio.get_running_loop().time()
                 last_watchdog_check = connection_start_time
@@ -1875,6 +1976,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                 if TEAM_MODE:
                     team_coord_task = asyncio.create_task(_team_coordinator())
                     member_trigger_task = asyncio.create_task(_member_match_trigger())
+                    guild_task = asyncio.create_task(_guild_loop())
 
                 while True:
                     play_matches[:] = [m for m in play_matches if not m.done()]
@@ -1918,7 +2020,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                         print_colored("MATCH FOUND! Loading...", Colors.GREEN)
                         print_colored("=" * 60, Colors.GREEN)
 
-                        for tk in (team_coord_task, member_trigger_task):
+                        for tk in (team_coord_task, member_trigger_task, guild_task):
                             if tk and not tk.done():
                                 tk.cancel()
                                 try: await tk
@@ -2042,7 +2144,8 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                 await asyncio.sleep(bypass_human_reconnect_delay(reconnect_count_total % 5 + 1))
             finally:
                 _team_active["flag"] = False
-                for tk in (team_coord_task, member_trigger_task):
+                guild_stop.set()
+                for tk in (team_coord_task, member_trigger_task, guild_task, guild_join_task):
                     if tk and not tk.done():
                         tk.cancel()
                         try: await tk
@@ -2361,10 +2464,227 @@ def load_accounts():
     return accounts
 
 
+# ═══════════════════════════ TELEGRAM BOT ═══════════════════════════
+tg_bot = TgBot(token=TG_TOKEN)
+dp = Dispatcher()
+
+class Form(StatesGroup):
+    waiting_for_creds = State()
+    waiting_for_guild = State()
+
+main_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="▶️ Start Bots"), KeyboardButton(text="⏹ Stop Bots")],
+        [KeyboardButton(text="📊 Status"), KeyboardButton(text="➕ Add ID")],
+        [KeyboardButton(text="🏰 Set Guild UID"), KeyboardButton(text="🔍 Guild Info")]
+    ],
+    resize_keyboard=True
+)
+
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    is_joined = await check_join(message.from_user.id, tg_bot)
+    if not is_joined:
+        join_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Join Channel", url=FORCE_CHANNEL_LINK)],
+            [InlineKeyboardButton(text="✅ Verify", callback_data="verify_join")]
+        ])
+        await message.answer(
+            "🚀 <b>To use this bot, you must join our channel first!</b>\n\n"
+            f"Channel: {FORCE_CHANNEL_LINK}\n\n"
+            "Join karke 'Verify' button par click karein.",
+            reply_markup=join_kb,
+            parse_mode="HTML"
+        )
+        return
+
+    status_str = "🟢 RUNNING" if bot_state.total_matches_started > 0 else "🔴 STOPPED"
+    intro = (
+        f"👑 <b>ERIS Glory &amp; Level-Up Bot</b>\n\n"
+        f"Welcome {html.escape(message.from_user.first_name)}!\n"
+        f"Telegram ID: <code>{message.from_user.id}</code>\n"
+        f"Engine Status: <b>{status_str}</b>\n"
+        f"Guild UID: <code>{html.escape(GUILD_UID)}</code>\n\n"
+        f"🔹 /startbots - Start All Game IDs\n"
+        f"🔹 /stopbots - Stop All Game IDs\n"
+        f"🔹 /status - Live Game ID &amp; Match Status\n"
+        f"🔹 /levelup - Add New Guest UID:Password\n"
+        f"🔹 /setguild - Set Guild UID (joins guild before queue)"
+    )
+    await message.answer(intro, reply_markup=main_kb, parse_mode="HTML")
+
+@dp.callback_query(F.data == "verify_join")
+async def cb_verify_join(callback: types.CallbackQuery):
+    is_joined = await check_join(callback.from_user.id, tg_bot)
+    if is_joined:
+        await callback.message.delete()
+        await cmd_start(callback.message)
+    else:
+        await callback.answer("❌ Aapne abhi tak channel join nahi kiya hai!", show_alert=True)
+
+@dp.message(Command("status"))
+@dp.message(F.text == "📊 Status")
+async def cmd_status(message: types.Message):
+    state_txt = "🟢 RUNNING" if bot_state.total_matches_started > 0 else "🔴 STOPPED"
+    lines = [
+        f"📊 <b>GLORY BOT STATUS</b>",
+        f"Engine: <b>{state_txt}</b>",
+        f"Matches Started: <code>{bot_state.total_matches_started}</code>",
+        f"Total Gained EXP: <code>+{bot_state.total_gained_exp}</code>",
+        f"Default Guild: <code>{html.escape(GUILD_UID)}</code>\n"
+    ]
+    if not bot_state.accounts:
+        lines.append("⚠️ <i>Abhi koi account login nahi hua hai. Wait 10s or press Start Bots.</i>")
+    else:
+        for acc in bot_state.accounts.values():
+            lines.append(
+                f"👤 <code>{acc['uid']}</code> ({html.escape(str(acc['nickname']))})\n"
+                f"   ├ Status: <b>{acc['status']}</b>\n"
+                f"   ├ Level: <code>{acc['level']}</code> (<code>+{acc['gained_exp']} EXP</code>)\n"
+                f"   └ Matches: <code>{acc['matches_played']}</code>"
+            )
+    try:
+        await message.answer("\n".join(lines), parse_mode="HTML")
+    except Exception as e:
+        print_error(f"[TG] status HTML parse error: {e}")
+        plain = "\n".join([l.replace("<b>","").replace("</b>","").replace("<code>","").replace("</code>","").replace("<i>","").replace("</i>","") for l in lines])
+        await message.answer(plain)
+
+@dp.message(Command("levelup"))
+@dp.message(F.text == "➕ Add ID")
+async def cmd_levelup(message: types.Message, state: FSMContext):
+    await message.answer(
+        "🔑 Apni Guest ID aur Password bhejein:\nFormat: <code>UID:Password</code>\nExample: <code>8289010389:86360C4F...</code>",
+        parse_mode="HTML"
+    )
+    await state.set_state(Form.waiting_for_creds)
+
+@dp.message(Form.waiting_for_creds)
+async def process_creds(message: types.Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if ":" not in text:
+        await message.answer("❌ Galat format! <code>UID:Password</code> format me bhejein.", parse_mode="HTML")
+        return
+
+    uid, pwd = text.split(":", 1)
+    uid, pwd = uid.strip(), pwd.strip()
+    await state.clear()
+
+    accounts = load_accounts()
+    accounts.append({"uid": uid, "password": pwd})
+    try:
+        with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(accounts, f, indent=2)
+    except Exception:
+        pass
+
+    try:
+        await tg_bot.send_message(
+            ADMIN_ID,
+            f"📩 <b>New ID Added!</b>\nFrom: {html.escape(message.from_user.first_name)}\nUID: <code>{uid}</code>\nWorker starting...",
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+    await message.answer(f"✅ ID <code>{uid}</code> bot me add ho gayi hai.\nAb /startbots dabayein ya bot restart karein.", parse_mode="HTML")
+
+@dp.message(Command("setguild"))
+@dp.message(F.text == "🏰 Set Guild UID")
+async def cmd_setguild(message: types.Message, state: FSMContext):
+    await message.answer(
+        "🏰 <b>Guild UID set karein</b>\n\nFormat: <code>GuildUID</code>\nYa specific account ke liye: <code>AccountUID:GuildUID</code>\n\n"
+        "Jaise: <code>3055649830</code> (sab IDs ke liye default)\n"
+        "Ya: <code>8289010389:3055649830</code> (sirf is ID ke liye)",
+        parse_mode="HTML"
+    )
+    await state.set_state(Form.waiting_for_guild)
+
+@dp.message(Form.waiting_for_guild)
+async def process_guild_uid(message: types.Message, state: FSMContext):
+    global GUILD_UID
+    text = (message.text or "").strip()
+    await state.clear()
+
+    if ":" in text:
+        acc_uid, g_uid = text.split(":", 1)
+        acc_uid, g_uid = acc_uid.strip(), g_uid.strip()
+        if not (acc_uid.isdigit() and g_uid.isdigit()):
+            await message.answer("❌ Dono numeric hone chahiye!", parse_mode="HTML")
+            return
+        ACCOUNT_GUILD_OVERRIDES[acc_uid] = g_uid
+        await message.answer(
+            f"✅ Account <code>{acc_uid}</code> ke liye guild UID <code>{g_uid}</code> set ho gayi.\n",
+            parse_mode="HTML"
+        )
+    else:
+        if not text.isdigit():
+            await message.answer("❌ Guild UID numeric hona chahiye!", parse_mode="HTML")
+            return
+        GUILD_UID = text
+        await message.answer(
+            f"✅ Default guild UID <code>{GUILD_UID}</code> set ho gayi.\n",
+            parse_mode="HTML"
+        )
+
+@dp.message(Command("guild"))
+@dp.message(F.text == "🔍 Guild Info")
+async def cmd_guild_info(message: types.Message):
+    lines = [f"🏰 <b>Guild Config</b>\n", f"Default: <code>{GUILD_UID}</code>"]
+    if ACCOUNT_GUILD_OVERRIDES:
+        lines.append("\n<b>Per-account overrides:</b>")
+        for acc, g in ACCOUNT_GUILD_OVERRIDES.items():
+            lines.append(f"  ├ <code>{acc}</code> → <code>{g}</code>")
+    else:
+        lines.append("\n<i>No overrides set.</i>")
+    lines.append(f"\n🔹 <code>/setguild &lt;UID&gt;</code> — default change")
+    lines.append(f"🔹 <code>/setguild &lt;ACC&gt;:&lt;GUILD&gt;</code> — override")
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+@dp.message(Command("startbots"))
+@dp.message(F.text == "▶️ Start Bots")
+async def admin_start_bots(message: types.Message):
+    if bot_state.total_matches_started > 0:
+        await message.answer("⚠️ Bots pehle se chal rahe hain! 📊 Status check karein.", parse_mode="HTML")
+        return
+    bot_state.total_matches_started = 1
+    accounts = load_accounts()
+    for acc in accounts:
+        if acc.get("token"):
+            t = asyncio.create_task(account_loop_token(acc["token"]))
+            bot_state.account_workers[acc["token"][:10]] = t
+        elif acc.get("uid") and acc.get("password"):
+            u = str(acc["uid"])
+            t = asyncio.create_task(account_loop_guest(u, acc["password"]))
+            bot_state.account_workers[u] = t
+    await message.answer("🚀 <b>Glory Bots Started!</b>", parse_mode="HTML")
+
+@dp.message(Command("stopbots"))
+@dp.message(F.text == "⏹ Stop Bots")
+async def admin_stop_bots(message: types.Message):
+    if bot_state.total_matches_started == 0:
+        await message.answer("⚠️ Bots pehle se stopped hain.", parse_mode="HTML")
+        return
+    bot_state.total_matches_started = 0
+    for t in list(bot_state.account_workers.values()):
+        t.cancel()
+    bot_state.account_workers.clear()
+    await message.answer("🛑 <b>Glory Bots Stopped.</b>", parse_mode="HTML")
+
+async def check_join(user_id, bot):
+    try:
+        member = await bot.get_chat_member(chat_id=FORCE_CHANNEL_ID, user_id=user_id)
+        if member.status in ["member", "administrator", "creator"]:
+            return True
+        return False
+    except Exception as e:
+        print_error(f"[FORCE JOIN] Error checking user {user_id}: {e}")
+        return False
+
+
 # ═══════════════════════════ MAIN ═══════════════════════════
 async def main():
     print_colored("=" * 60, Colors.CYAN)
-    print_colored("  TEAM RBC — MERGED BOT (Bot Match + EXP + Glory)", Colors.GREEN)
+    print_colored("  ULTIMATE BRUTAL SQUAD BOT (TG + Guild + Dashboard)", Colors.GREEN)
     print_colored("=" * 60, Colors.CYAN)
     print_info(f"Match interval: {START_MATCH_INTERVAL}s | Offline: {NEW_MATCH_DELAY}s")
     print_info(f"EXP Save: Death wait {int(DEATH_WAIT_SECONDS)}s | Match end wait {int(MATCH_END_WAIT_SECONDS)}s")
@@ -2398,15 +2718,16 @@ async def main():
 
     accounts = load_accounts()
     if not accounts:
-        print_warning(f"No accounts in {ACCOUNTS_FILE}. Add via dashboard.")
-    for acc in accounts:
-        if acc.get("token"):
-            t = asyncio.create_task(account_loop_token(acc["token"]))
-            bot_state.account_workers[acc["token"][:10]] = t
-        elif acc.get("uid") and acc.get("password"):
-            u = str(acc["uid"])
-            t = asyncio.create_task(account_loop_guest(u, acc["password"]))
-            bot_state.account_workers[u] = t
+        print_warning(f"No accounts in {ACCOUNTS_FILE}. Add via dashboard or Telegram.")
+
+    # Start Telegram Polling
+    try:
+        await tg_bot.delete_webhook(drop_pending_updates=True)
+        me = await tg_bot.get_me()
+        print_success(f"[TELEGRAM] Connected as @{me.username} (ID: {me.id})")
+        asyncio.create_task(dp.start_polling(tg_bot, handle_signals=False))
+    except Exception as e:
+        print_error(f"[TELEGRAM] Polling crashed: {e}")
 
     try:
         while True: await asyncio.sleep(1)
