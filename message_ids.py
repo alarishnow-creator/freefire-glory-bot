@@ -1,3 +1,26 @@
+# -*- coding: utf-8 -*-
+# ═══════════════════════════════════════════════════════════════════
+#  🇧🇩  TCP BZ — PREMIUM MESSAGE ID MAP  🇧🇩
+#  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#     👑 Owner      : TCP BZ
+#     🌏 Country    : Bangladesh 🇧🇩
+#     📦 Module     : message_ids (Free Fire Protocol)
+#     🔢 Total IDs  : 1700+ message identifiers
+#     ⚡ Version    : PREMIUM EDITION v2.0
+#     📅 Build      : 2026
+#  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  © 2026 TCP BZ — All Rights Reserved
+# ═══════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════ BRAND META ═══════════════════════════
+__author__   = "TCP BZ"
+__brand__    = "TCP BZ — Premium Squad Bot"
+__country__  = "Bangladesh 🇧🇩"
+__version__  = "PREMIUM v2.0"
+__year__     = "2026"
+__rights__   = "© 2026 TCP BZ — All Rights Reserved"
+
+# ═══════════════════════════ MESSAGE ID MAP ═══════════════════════════
 MESSAGE_ID_TO_NAME = {
     0: "INVALID_MESSAGE_ID",
     1: "UDP_HELLO",
@@ -1883,3 +1906,46 @@ MESSAGE_ID_TO_NAME = {
     3585: "RUDP_S2C_REMOVE_TELEPORT_DOORS",
     3586: "RUDP_S2C_SubgameLobbyLW_BattleFenceState",
 }
+
+# ═══════════════════════════ HELPER FUNCTIONS ═══════════════════════════
+def get_message_name(msg_id):
+    """Get message name by ID with brand fallback."""
+    return MESSAGE_ID_TO_NAME.get(msg_id, f"UNKNOWN_{msg_id}")
+
+
+def get_message_id(name):
+    """Reverse lookup: name → ID."""
+    for mid, mname in MESSAGE_ID_TO_NAME.items():
+        if mname == name:
+            return mid
+    return None
+
+
+def search_messages(keyword):
+    """Search messages by keyword (case-insensitive)."""
+    kw = keyword.upper()
+    return {mid: name for mid, name in MESSAGE_ID_TO_NAME.items() if kw in name.upper()}
+
+
+def get_category_stats():
+    """Get statistics by category prefix."""
+    stats = {}
+    for name in MESSAGE_ID_TO_NAME.values():
+        prefix = name.split("_")[0]
+        stats[prefix] = stats.get(prefix, 0) + 1
+    return stats
+
+
+def total_messages():
+    """Total registered message IDs."""
+    return len(MESSAGE_ID_TO_NAME)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  🇧🇩 TCP BZ — Module Loaded Successfully
+#  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#     ✅ Owner      : TCP BZ
+#     ✅ Country    : Bangladesh 🇧🇩
+#     ✅ Version    : PREMIUM v2.0
+#     ✅ © 2026 — All Rights Reserved
+# ═══════════════════════════════════════════════════════════════════════
