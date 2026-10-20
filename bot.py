@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # ═══════════════════════════════════════════════════════════════════
-#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (Real Sync, Real EXP)
+#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (Real API + Match Loop Fix)
 # ═══════════════════════════════════════════════════════════════════
 import sys, asyncio, httpx, random, json, socket, struct, time, os, uuid
 import itertools, secrets, traceback, base64, math, html
@@ -32,7 +32,6 @@ import thunderFF_pb2
 from dashboard_server import bot_state, start_web_dashboard
 
 # ═══════════════════════════ CONFIG ═══════════════════════════
-# HARDCODED TOKEN AS REQUESTED
 TG_TOKEN = os.environ.get("TG_TOKEN", "8244534907:AAGFRq82LdJqwIc22K8dBm9kJ7wG21OYNmo")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "7424554376"))
 
@@ -65,7 +64,6 @@ BR_MAP_ID              = 1
 ANTI_AFK_MIN_INTERVAL  = 1.8
 ANTI_AFK_MAX_INTERVAL  = 3.5
 
-# WATCHDOG TIMEOUT INCREASED
 MATCH_SEARCH_TIMEOUT   = 300.0
 MATCH_WATCHDOG_CHECK   = 45.0
 REGION_ROTATION_LIST   = ["IND", "IND", "IND", "ID", "SG"]
