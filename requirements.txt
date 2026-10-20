@@ -1,6 +1,3 @@
-protobuf-decoder
-requests
-google-play-scraper
 aiogram>=3.4.0
 aiohttp>=3.9.0
 httpx>=0.27.0
