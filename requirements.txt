@@ -1,9 +1,0 @@
-httpx
-google-play-scraper
-pycryptodome
-protobuf-decoder
-protobuf
-requests
-aiohttp
-aiogram>=3.4.0
-PyJWT
