@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # ═══════════════════════════════════════════════════════════════════
-#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (Real Sync, Real Status)
+#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (Real Sync, Real EXP)
 # ═══════════════════════════════════════════════════════════════════
 import sys, asyncio, httpx, random, json, socket, struct, time, os, uuid
 import itertools, secrets, traceback, base64, math, html
@@ -32,6 +32,7 @@ import thunderFF_pb2
 from dashboard_server import bot_state, start_web_dashboard
 
 # ═══════════════════════════ CONFIG ═══════════════════════════
+# HARDCODED TOKEN AS REQUESTED
 TG_TOKEN = os.environ.get("TG_TOKEN", "8244534907:AAGFRq82LdJqwIc22K8dBm9kJ7wG21OYNmo")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "7424554376"))
 
@@ -64,9 +65,9 @@ BR_MAP_ID              = 1
 ANTI_AFK_MIN_INTERVAL  = 1.8
 ANTI_AFK_MAX_INTERVAL  = 3.5
 
-MATCH_SEARCH_TIMEOUT   = 120.0
-MATCH_WATCHDOG_CHECK   = 30.0
-# IND server priority
+# WATCHDOG TIMEOUT INCREASED
+MATCH_SEARCH_TIMEOUT   = 300.0
+MATCH_WATCHDOG_CHECK   = 45.0
 REGION_ROTATION_LIST   = ["IND", "IND", "IND", "ID", "SG"]
 REGION_ROTATE_EVERY_N  = 3
 MAX_SEARCH_ATTEMPTS    = 25
@@ -90,7 +91,7 @@ ENABLE_HTTP_PING = False
 FALLBACK_UID = ""
 FALLBACK_PASSWORD = ""
 
-# ═══════════════════════════ SQUAD CONFIG (BRUTAL FIX) ═══════════════════════════
+# ═══════════════════════════ SQUAD CONFIG ═══════════════════════════
 TEAM_MODE               = True
 TEAM_SIZE               = 4
 TEAM_PEER_WAIT_TIMEOUT  = 90.0  
@@ -107,8 +108,8 @@ DEBUG_TEAM_PACKETS      = False
 
 # ── GUILD CONFIG ──
 GUILD_UID = os.environ.get("GUILD_UID", "3055649830")
-GUILD_JOIN_RETRY_INTERVAL = 8.0
-GUILD_JOIN_MAX_ATTEMPTS = 6
+GUILD_JOIN_RETRY_INTERVAL = 15.0
+GUILD_JOIN_MAX_ATTEMPTS = 999
 GUILD_APPROVE_INTERVAL = 15.0
 ACCOUNT_GUILD_OVERRIDES = {}
 
