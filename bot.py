@@ -21,7 +21,7 @@ from aiogram import Bot as TgBot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, ChatMemberUpdated
 from aiohttp import web
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
@@ -33,6 +33,10 @@ ADMIN_ID = int(os.environ.get("ADMIN_ID", "7424554376"))
 BOT_RUNNING = False
 ACTIVE_WORKER_TASKS = []
 
+# FORCE JOIN CHANNEL
+FORCE_CHANNEL_ID = "-1003725624623" 
+FORCE_CHANNEL_LINK = "https://t.me/+Qw8U-azwpbFjYmQ1"
+
 WEB_PORT = int(os.environ.get("PORT", 20333))
 TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"
@@ -42,8 +46,8 @@ START_MATCH_INTERVAL, NEW_MATCH_DELAY = 4.0, 8.0
 MAX_MATCH_DURATION, MATCH_IDLE_TIMEOUT = 3000, 90.0
 DEATH_WAIT_SECONDS, MATCH_END_WAIT_SECONDS = 120.0, 60.0
 
-# TEAM_MODE False for solo matchmaking to prevent deadlock
-TEAM_MODE, TEAM_SIZE = False, 4
+# SQUAD MODE ENABLED
+TEAM_MODE, TEAM_SIZE = True, 4
 TEAM_PEER_WAIT_TIMEOUT, TEAM_CREATE_WAIT = 120.0, 4.0
 TEAM_INVITE_CYCLE_WAIT, TEAM_INVITE_MAX_TIME = 4.0, 120.0
 TEAM_HEARTBEAT_INTERVAL, TEAM_IDLE_ITERS_TEAM = 3.0, 3600
@@ -95,6 +99,17 @@ def print_success(t): print_colored(f"[+] {t}", Colors.GREEN)
 def print_error(t): print_colored(f"[-] {t}", Colors.FAIL)
 def print_warning(t): print_colored(f"[!] {t}", Colors.WARNING)
 def print_info(t): print_colored(f"[i] {t}", Colors.CYAN)
+
+# Force Join Check
+async def check_join(user_id, bot):
+    try:
+        member = await bot.get_chat_member(chat_id=FORCE_CHANNEL_ID, user_id=user_id)
+        if member.status in ["member", "administrator", "creator"]:
+            return True
+        return False
+    except Exception as e:
+        print_error(f"[FORCE JOIN] Error checking user {user_id}: {e}")
+        return False
 
 def get_proto_field(d, key, default=None):
     if not d or not isinstance(d, dict):
@@ -1606,24 +1621,6 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                     team_coord_task = asyncio.create_task(_team_coordinator())
                     member_trigger_task = asyncio.create_task(_member_match_trigger())
                     guild_task = asyncio.create_task(_guild_loop())
-                else:
-                    # Solo mode: trigger match directly
-                    async def _solo_match_trigger():
-                        await asyncio.sleep(5.0)
-                        while BOT_RUNNING and _team_active["flag"]:
-                            if bot_state.is_paused(uid_str):
-                                break
-                            try:
-                                writer.write(ready_for_game(int(current_account_data.get('account_id')), current_key, current_iv))
-                                await writer.drain()
-                                await asyncio.sleep(1.0)
-                                writer.write(start_match_team(int(current_account_data.get('account_id')), current_key, current_iv, region=account_region))
-                                await writer.drain()
-                                print_info(f"[MATCHMAKING] Solo {uid_str} triggered match start")
-                            except Exception:
-                                pass
-                            await asyncio.sleep(10.0)
-                    team_coord_task = asyncio.create_task(_solo_match_trigger())
 
                 no_response_count = 0
                 while BOT_RUNNING:
@@ -2137,7 +2134,6 @@ async def start_web():
     app.router.add_get("/health", health)
     runner = web.AppRunner(app)
     await runner.setup()
-    # Railway passes PORT env, bind to 0.0.0.0
     await web.TCPSite(runner, "0.0.0.0", WEB_PORT).start()
 
 # ═══════════════════════════ TELEGRAM BOT CONTROL ═══════════════════════════
@@ -2159,6 +2155,22 @@ main_kb = ReplyKeyboardMarkup(
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    # Check Force Join
+    is_joined = await check_join(message.from_user.id, tg_bot)
+    if not is_joined:
+        join_kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Join Channel", url=FORCE_CHANNEL_LINK)],
+            [InlineKeyboardButton(text="✅ Verify", callback_data="verify_join")]
+        ])
+        await message.answer(
+            "🚀 <b>To use this bot, you must join our channel first!</b>\n\n"
+            f"Channel: {FORCE_CHANNEL_LINK}\n\n"
+            "Join karke 'Verify' button par click karein.",
+            reply_markup=join_kb,
+            parse_mode="HTML"
+        )
+        return
+
     status_str = "🟢 RUNNING" if BOT_RUNNING else "🔴 STOPPED"
     intro = (
         f"👑 <b>ERIS Glory &amp; Level-Up Bot</b>\n\n"
@@ -2173,6 +2185,15 @@ async def cmd_start(message: types.Message):
         f"🔹 /setguild - Set Guild UID (joins guild before queue)"
     )
     await message.answer(intro, reply_markup=main_kb, parse_mode="HTML")
+
+@dp.callback_query(F.data == "verify_join")
+async def cb_verify_join(callback: types.CallbackQuery):
+    is_joined = await check_join(callback.from_user.id, tg_bot)
+    if is_joined:
+        await callback.message.delete()
+        await cmd_start(callback.message)
+    else:
+        await callback.answer("❌ Aapne abhi tak channel join nahi kiya hai!", show_alert=True)
 
 @dp.message(Command("status"))
 @dp.message(F.text == "📊 Status")
