@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # ═══════════════════════════════════════════════════════════════════
-#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (Telegram + Guild + Dashboard)
+#  TEAM RBC — ULTIMATE BRUTAL SQUAD BOT (TG + Guild via TCP + Dashboard)
 # ═══════════════════════════════════════════════════════════════════
 import sys, asyncio, httpx, random, json, socket, struct, time, os, uuid
 import itertools, secrets, traceback, base64, math, html
@@ -1638,39 +1638,23 @@ async def _handle_team_invite(hex_data, pl, uid_str, current_account_data,
         return False
 
 
-# ═══════════════════════════ GUILD LOGIC ═══════════════════════════
-async def join_guild_via_api(account_data, guild_uid=None):
+# ═══════════════════════════ GUILD LOGIC (TCP ONLY) ═══════════════════════════
+async def join_guild_via_tcp(writer, key, iv, account_data, guild_uid=None):
     if guild_uid is None:
         auth_uid = str(account_data.get('auth_uid', account_data.get('account_id', '')))
         guild_uid = ACCOUNT_GUILD_OVERRIDES.get(auth_uid, GUILD_UID)
-    jwt = account_data.get('token')
-    srv = account_data.get('server_url')
-    rel = account_data.get('release_version')
-    own_id = account_data.get('account_id')
-    if not (jwt and srv and rel and own_id):
+    if not writer or writer.is_closing():
         return False
+    own_id = account_data.get('account_id', '?')
     try:
-        payload = bytes.fromhex(encrypt_api_bytes(create_proto({"1": int(own_id), "2": int(guild_uid)})).hex())
-        hdrs = {
-            "authorization": f"Bearer {jwt}",
-            "host": srv.replace("https://", "").replace("http://", "").split("/")[0],
-            "x-ga": "v1 1",
-            "content-type": "application/x-www-form-urlencoded",
-            "accept-encoding": "deflate, gzip",
-            "releaseversion": f"{rel}",
-            "user-agent": "UnityPlayer/2022.3.47f1",
-            "accept": "*/*",
-            "x-unity-version": "2022.3.47f1"
-        }
-        r = await client.post(f"{srv.rstrip('/')}/JoinGuild", headers=hdrs, content=payload, timeout=10.0)
-        if r.status_code == 200:
-            print_success(f"[GUILD API] {own_id} joined guild {guild_uid}")
-            return True
-        else:
-            print_warning(f"[GUILD API] {own_id} join HTTP {r.status_code}, will retry via TCP")
+        pkt = guild_apply_tcp(guild_uid, key, iv)
+        writer.write(pkt)
+        await writer.drain()
+        print_info(f"[GUILD TCP] {own_id} sent apply to {guild_uid}")
+        return True
     except Exception as e:
-        print_warning(f"[GUILD API] {own_id} error: {e}")
-    return False
+        print_error(f"[GUILD TCP] {own_id} write error: {e}")
+        return False
 
 async def guild_join_worker(writer_ref, key, iv, account_data, stop_event):
     auth_uid = str(account_data.get('auth_uid', account_data.get('account_id', '')))
@@ -1719,24 +1703,6 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
             cd = bot_state.account_credentials.get(uid_str)
             if cd: await refresh_account_profile(cd)
         except Exception: pass
-
-    async def _guild_loop():
-        while _team_active["flag"]:
-            if _writer_ref["w"] and not _writer_ref["w"].is_closing():
-                await join_guild_via_api(current_account_data)
-                _g_pkt = guild_apply_tcp(
-                    ACCOUNT_GUILD_OVERRIDES.get(
-                        str(current_account_data.get('auth_uid', current_account_data.get('account_id', ''))),
-                        GUILD_UID
-                    ),
-                    current_key, current_iv
-                )
-                try:
-                    _writer_ref["w"].write(_g_pkt)
-                    await _writer_ref["w"].drain()
-                except Exception:
-                    pass
-            await asyncio.sleep(GUILD_APPROVE_INTERVAL)
 
     async def _team_coordinator():
         try:
@@ -1927,8 +1893,6 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                                 cache_invalidate(f"tok_{current_account_data['auth_token'][:20]}")
                         except Exception: pass
                         raise ConnectionError("Cache expired")
-
-                await join_guild_via_api(current_account_data)
 
                 rip = await resolve_host_cloudflare(ip)
                 reader, writer = await asyncio.open_connection(rip, int(port))
