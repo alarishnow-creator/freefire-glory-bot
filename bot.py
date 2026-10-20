@@ -42,7 +42,8 @@ START_MATCH_INTERVAL, NEW_MATCH_DELAY = 4.0, 8.0
 MAX_MATCH_DURATION, MATCH_IDLE_TIMEOUT = 3000, 90.0
 DEATH_WAIT_SECONDS, MATCH_END_WAIT_SECONDS = 120.0, 60.0
 
-TEAM_MODE, TEAM_SIZE = True, 4
+# TEAM_MODE False for solo matchmaking to prevent deadlock
+TEAM_MODE, TEAM_SIZE = False, 4
 TEAM_PEER_WAIT_TIMEOUT, TEAM_CREATE_WAIT = 120.0, 4.0
 TEAM_INVITE_CYCLE_WAIT, TEAM_INVITE_MAX_TIME = 4.0, 120.0
 TEAM_HEARTBEAT_INTERVAL, TEAM_IDLE_ITERS_TEAM = 3.0, 3600
@@ -1605,6 +1606,24 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                     team_coord_task = asyncio.create_task(_team_coordinator())
                     member_trigger_task = asyncio.create_task(_member_match_trigger())
                     guild_task = asyncio.create_task(_guild_loop())
+                else:
+                    # Solo mode: trigger match directly
+                    async def _solo_match_trigger():
+                        await asyncio.sleep(5.0)
+                        while BOT_RUNNING and _team_active["flag"]:
+                            if bot_state.is_paused(uid_str):
+                                break
+                            try:
+                                writer.write(ready_for_game(int(current_account_data.get('account_id')), current_key, current_iv))
+                                await writer.drain()
+                                await asyncio.sleep(1.0)
+                                writer.write(start_match_team(int(current_account_data.get('account_id')), current_key, current_iv, region=account_region))
+                                await writer.drain()
+                                print_info(f"[MATCHMAKING] Solo {uid_str} triggered match start")
+                            except Exception:
+                                pass
+                            await asyncio.sleep(10.0)
+                    team_coord_task = asyncio.create_task(_solo_match_trigger())
 
                 no_response_count = 0
                 while BOT_RUNNING:
@@ -2118,6 +2137,7 @@ async def start_web():
     app.router.add_get("/health", health)
     runner = web.AppRunner(app)
     await runner.setup()
+    # Railway passes PORT env, bind to 0.0.0.0
     await web.TCPSite(runner, "0.0.0.0", WEB_PORT).start()
 
 # ═══════════════════════════ TELEGRAM BOT CONTROL ═══════════════════════════
